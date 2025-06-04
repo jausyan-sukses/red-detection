@@ -1,62 +1,52 @@
 import cv2
-import numpy as np
+import time
+
+def gstreamer_pipeline(
+    sensor_id=0,
+    capture_width=320,
+    capture_height=240,
+    display_width=320,
+    display_height=240,
+    framerate=60,
+    flip_method=2,
+):
+    return (
+        f"nvarguscamerasrc sensor-id={sensor_id} ! "
+        f"video/x-raw(memory:NVMM), width={capture_width}, height={capture_height}, "
+        f"format=NV12, framerate={framerate}/1 ! nvvidconv flip-method={flip_method} ! "
+        f"video/x-raw, width={display_width}, height={display_height}, format=BGRx ! "
+        f"videoconvert ! video/x-raw, format=BGR ! appsink"
+    )
 
 def main():
-    cap = cv2.VideoCapture(0)  # Ganti ke 1 jika pakai USB camera eksternal
-
+    # Aktifkan kamera
+    cap = cv2.VideoCapture(gstreamer_pipeline(), cv2.CAP_GSTREAMER)
     if not cap.isOpened():
-        print("Kamera gagal dibuka")
+        print("Gagal membuka kamera.")
         return
 
-    use_cuda = cv2.cuda.getCudaEnabledDeviceCount() > 0
-    print(f"CUDA tersedia: {use_cuda}")
+    print("Kamera terbuka. Mengukur FPS selama 100 frame...")
 
-    while True:
+    frame_count = 0
+    start_time = time.time()
+
+    while frame_count < 100:
         ret, frame = cap.read()
         if not ret:
+            print("Gagal membaca frame.")
             break
+        frame_count += 1
 
-        frame = cv2.resize(frame, (320, 240))
+        # Uncomment untuk melihat preview (gunakan hanya untuk debugging!)
+        # cv2.imshow("Preview", frame)
+        # if cv2.waitKey(1) & 0xFF == ord('q'):
+        #     break
 
-        if use_cuda:
-            # Upload frame ke GPU dan konversi ke HSV
-            gpu_frame = cv2.cuda_GpuMat()
-            gpu_frame.upload(frame)
-            hsv_gpu = cv2.cuda.cvtColor(gpu_frame, cv2.COLOR_BGR2HSV)
+    elapsed_time = time.time() - start_time
+    fps = frame_count / elapsed_time
 
-            # Unduh ke CPU untuk thresholding
-            hsv_cpu = hsv_gpu.download()
-        else:
-            # Konversi di CPU
-            hsv_cpu = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
-
-        # Thresholding warna merah di CPU
-        lower_red1 = np.array([0, 120, 70])
-        upper_red1 = np.array([10, 255, 255])
-        lower_red2 = np.array([170, 120, 70])
-        upper_red2 = np.array([180, 255, 255])
-
-        mask1 = cv2.inRange(hsv_cpu, lower_red1, upper_red1)
-        mask2 = cv2.inRange(hsv_cpu, lower_red2, upper_red2)
-        red_mask = cv2.bitwise_or(mask1, mask2)
-
-        # Temukan kontur objek merah
-        contours, _ = cv2.findContours(red_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
-        for cnt in contours:
-            area = cv2.contourArea(cnt)
-            if area > 500:  # Filter noise kecil
-                x, y, w, h = cv2.boundingRect(cnt)
-                cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 0, 255), 2)
-                cv2.putText(frame, "Red Object", (x, y - 10),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
-
-        # Tampilkan hasil
-        cv2.imshow("Red Object Tracking", frame)
-        # cv2.imshow("Mask", red_mask)  # Aktifkan jika ingin lihat mask juga
-
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            break
+    print(f"Captured {frame_count} frames in {elapsed_time:.2f} sec")
+    print(f"Estimated FPS: {fps:.2f}")
 
     cap.release()
     cv2.destroyAllWindows()
