@@ -5,11 +5,11 @@ def main():
     cap = cv2.VideoCapture(0)  # Ganti ke 1 jika pakai USB camera eksternal
 
     if not cap.isOpened():
-        print("❌ Kamera gagal dibuka")
+        print("Kamera gagal dibuka")
         return
 
     use_cuda = cv2.cuda.getCudaEnabledDeviceCount() > 0
-    print(f"✅ CUDA tersedia: {use_cuda}")
+    print(f"CUDA tersedia: {use_cuda}")
 
     while True:
         ret, frame = cap.read()
